@@ -1,8 +1,33 @@
+import os
 import numpy as np
 import pandas as pd
-import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import seaborn as sns
+
+import pickle
+import category_encoders as ce
+
+from scipy.special import boxcox1p
+
+from sklearn.base import BaseEstimator
+from sklearn.base import TransformerMixin
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+
+from sklearn.ensemble import GradientBoostingClassifier, AdaBoostClassifier, RandomForestClassifier, \
+    ExtraTreesClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import precision_recall_fscore_support as score
+from sklearn.metrics import confusion_matrix, accuracy_score, roc_auc_score
+
+# %%
 
 train_path = os.path.join('data', 'kaggle')
 
@@ -21,8 +46,6 @@ feature_cols = data.columns[:-1]
 correlations = data[feature_cols].corrwith(y)
 correlations.sort_values(inplace=True)
 print(correlations)
-
-import os, numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
 
 os.chdir('data')
 
@@ -50,12 +73,8 @@ y_test = data.loc[test_idx, 'churn']
 print(y_train.value_counts(normalize=True))
 print(y_test.value_counts(normalize=True))
 
+
 # %%
-from sklearn.base import BaseEstimator
-from sklearn.base import TransformerMixin
-from scipy.special import boxcox1p
-
-
 class NorTransfer(BaseEstimator, TransformerMixin):
     def __init__(self, attr_names):  # no *args or **kargs
         self.attr_names = 'test'
@@ -93,12 +112,6 @@ class NorTransfer(BaseEstimator, TransformerMixin):
 
 
 # %%
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder, StandardScaler, LabelBinarizer
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-import category_encoders as ce
-
 # Normalization applied to numerical attributes
 train_num = X_train.select_dtypes(include=['float64', 'int64'])
 
@@ -138,8 +151,6 @@ X_test_prepared = full_pipeline.fit_transform(X_test)
 print(pd.DataFrame(X_test_prepared))
 
 # %%
-from sklearn.preprocessing import LabelEncoder
-
 le = LabelEncoder()
 y_train_prepared = le.fit_transform(y_train)
 y_test_prepared = le.fit_transform(y_test)
@@ -148,47 +159,41 @@ print(y_train_prepared)
 print(y_test_prepared)
 
 # %%
-import matplotlib.pyplot as plt
-import seaborn as sns
-
 sns.set_style('white')
 pd.DataFrame(X_train_prepared).hist(bins=50, figsize=(20, 20), color='green')
 plt.show()
 
 # %% Logistic regression
-from sklearn.metrics import precision_recall_fscore_support as score
-from sklearn.metrics import confusion_matrix, accuracy_score, roc_auc_score
-from sklearn.preprocessing import label_binarize
-from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import GridSearchCV
-
 # Standard logistic regression
 param_lr = {
     'penalty': ['l1', 'l2'],
     'C': np.logspace(-4, 4, 20)
 }
-lr = GridSearchCV(LogisticRegression(solver='liblinear'), param_lr, verbose=True, cv=4, n_jobs=-1)
+lr = GridSearchCV(LogisticRegression(solver='liblinear', max_iter=1000, random_state=42), param_lr, verbose=True, cv=4,
+                  n_jobs=-1)
 lr.fit(X_train_prepared, y_train_prepared)
+print(lr.best_params_)
+pkl_lr = open('lr.pkl', 'wb')
+pickle.dump(lr, pkl_lr)
+pkl_lr.close()
+# %%
+lr = pickle.load(open('lr.pkl', 'rb'))
 print(lr.best_params_)
 
 y_pred_lr = lr.predict(X_test_prepared)
 
 precision, recall, fscore, _ = score(y_test_prepared, y_pred_lr, average='weighted')
+accuracy = accuracy_score(y_test_prepared, y_pred_lr)
 
-print('precision', precision)
-print('recall', recall)
-print('fscore', fscore)
+metrics = list()
+metrics.append(pd.Series({'precision': precision, 'recall': recall,
+                          'fscore': fscore, 'accuracy': accuracy},
+                         name='lr'))
 
 lr_cm = confusion_matrix(y_test_prepared, y_pred_lr)
 sns.heatmap(lr_cm, annot=True, fmt='d', cmap=mpl.cm.binary)
 plt.show()
 # %%
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import precision_recall_fscore_support as score
-from sklearn.metrics import confusion_matrix, accuracy_score, roc_auc_score
-from sklearn.model_selection import GridSearchCV
-
-
 param_knn = {
     'n_neighbors': list(range(2, 11)),
     'weights': ['distance', 'uniform']
@@ -201,16 +206,168 @@ print(knn.best_params_)
 y_pred_knn = knn.predict(X_test_prepared)
 
 precision_knn, recall_knn, fscore_knn, _knn = score(y_test_prepared, y_pred_knn, average='weighted')
+accuracy_knn = accuracy_score(y_test_prepared, y_pred_knn)
 
-print('precision', precision_knn)
-print('recall', recall_knn)
-print('fscore', fscore_knn)
-
+metrics.append(pd.Series({'precision': precision_knn, 'recall': recall_knn,
+                          'fscore': fscore_knn, 'accuracy': accuracy_knn},
+                         name='knn'))
 
 knn_cm = confusion_matrix(y_test_prepared, y_pred_knn)
 sns.heatmap(knn_cm, annot=True, fmt='d', cmap=mpl.cm.binary)
 plt.show()
 
+# %%
+param_tree = {
+    'criterion': ['gini', 'entropy'],
+    'splitter': ['best', 'random'],
+    'max_depth': list(np.arange(3, 10))
+}
+
+tree = GridSearchCV(DecisionTreeClassifier(), param_tree, verbose=True, cv=4, n_jobs=-1)
+
+tree.fit(X_train_prepared, y_train_prepared)
+print(tree.best_params_)
+
+y_pred_tree = tree.predict(X_test_prepared)
+
+precision_tree, recall_tree, fscore_tree, _tree = score(y_test_prepared, y_pred_tree, average='weighted')
+accuracy_tree = accuracy_score(y_test_prepared, y_pred_tree)
+
+metrics.append(pd.Series({'precision': precision_tree, 'recall': recall_tree,
+                          'fscore': fscore_tree, 'accuracy': accuracy_tree},
+                         name='DTree'))
+
+cm_tree = confusion_matrix(y_test_prepared, y_pred_tree)
+sns.heatmap(cm_tree, annot=True, fmt='d', cmap=mpl.cm.binary)
+plt.show()
+
+# %%
+param_rf = {
+    'criterion': ['gini', 'entropy'],
+    'n_estimators': [15, 20, 30, 40, 50, 100, 150, 200, 300, 400],
+    'max_depth': list(np.arange(5, 15)),
+    'warm_start': [True, False],
+    'oob_score': [True]
+}
+
+rf = GridSearchCV(RandomForestClassifier(), param_rf, verbose=True, cv=4, n_jobs=-1)
+rf.fit(X_train_prepared, y_train_prepared)
+print(rf.best_params_)
+
+y_pred_rf = rf.predict(X_test_prepared)
+
+precision_rf, recall_rf, fscore_rf, _rf = score(y_test_prepared, y_pred_rf, average='weighted')
+accuracy_rf = accuracy_score(y_test_prepared, y_pred_rf)
+
+metrics.append(pd.Series({'precision': precision_rf, 'recall': recall_rf,
+                          'fscore': fscore_rf, 'accuracy': accuracy_rf},
+                         name='RandomForest'))
+
+cm_rf = confusion_matrix(y_test_prepared, y_pred_rf)
+sns.heatmap(cm_rf, annot=True, fmt='d', cmap=mpl.cm.binary)
+plt.show()
+
+# %%
+param_etc = {
+    'criterion': ['gini', 'entropy'],
+    'n_estimators': [15, 20, 30, 40, 50, 100, 150, 200, 300, 400],
+    'max_depth': list(np.arange(5, 15)),
+    'warm_start': [True, False],
+    'bootstrap': [True],
+    'oob_score': [True, False]
+}
+
+extrTree = GridSearchCV(ExtraTreesClassifier(), param_etc, verbose=True, cv=4, n_jobs=-1)
+extrTree.fit(X_train_prepared, y_train_prepared)
+print(extrTree.best_params_)
+
+y_pred_extrTree = extrTree.predict(X_test_prepared)
+
+precision_extrTree, recall_extrTree, fscore_extrTree, _extrTree = score(y_test_prepared, y_pred_extrTree,
+                                                                        average='weighted')
+accuracy_extrTree = accuracy_score(y_test_prepared, y_pred_extrTree)
+
+metrics.append(pd.Series({'precision': precision_extrTree, 'recall': recall_extrTree,
+                          'fscore': fscore_extrTree, 'accuracy': accuracy_extrTree},
+                         name='ExtraTrees'))
+
+cm_extrTree = confusion_matrix(y_test_prepared, y_pred_extrTree)
+sns.heatmap(cm_extrTree, annot=True, fmt='d', cmap=mpl.cm.binary)
+plt.show()
+
+# %%
+param_gb = {
+    'criterion': ['friedman_mse', 'mse'],
+    'n_estimators': [30, 50, 100, 150, 200, 300],
+    "learning_rate": [0.01, 0.05, 0.1, 0.15, 0.2],
+    #    "min_samples_split": np.linspace(0.1, 0.5, 5),
+    #    "min_samples_leaf": np.linspace(0.1, 0.5, 5),
+    "max_depth": [3, 5, 8],
+    "max_features": ["log2", "sqrt"],
+    "subsample": [0.5, 0.75, 1.0],
+}
+
+gboost = GridSearchCV(GradientBoostingClassifier(), param_gb, verbose=True, cv=4, n_jobs=-1)
+gboost.fit(X_train_prepared, y_train_prepared)
+print(gboost.best_params_)
+import pickle
+
+pkl_gboost_file = open('gboot.pkl', 'wb')
+pickle.dump(gboost, pkl_gboost_file)
+pkl_gboost_file.close()
+# %%
+gboost = pickle.load(open('gboot.pkl', 'rb'))
+print(gboost.best_params_)
+
+y_pred_gboost = gboost.predict(X_test_prepared)
+
+precision_gboost, recall_gboost, fscore_gboost, _gboost = score(y_test_prepared, y_pred_gboost, average='weighted')
+accuracy_gboost = accuracy_score(y_test_prepared, y_pred_gboost)
+
+metrics.append(pd.Series({'precision': precision_gboost, 'recall': recall_gboost,
+                          'fscore': fscore_gboost, 'accuracy': accuracy_gboost},
+                         name='GradientBoosting'))
+
+cm_gboost = confusion_matrix(y_test_prepared, y_pred_gboost)
+sns.heatmap(cm_gboost, annot=True, fmt='d', cmap=mpl.cm.binary)
+plt.show()
+
+# %%
+param_aboost = {
+    'n_estimators': [30, 50, 100, 150, 200, 300],
+    "learning_rate": [0.01, 0.05, 0.1, 0.15, 0.2],
+    "algorithm": ['SAMME', 'SAMME.R'],
+}
+
+aboost = GridSearchCV(AdaBoostClassifier(), param_aboost, verbose=True, cv=4, n_jobs=-1)
+aboost.fit(X_train_prepared, y_train_prepared)
+print(aboost.best_params_)
+
+pkl_aboost_file = open('aboot.pkl', 'wb')
+pickle.dump(aboost, pkl_aboost_file)
+pkl_aboost_file.close()
+
+# %%
+aboost = pickle.load(open('gboot.pkl', 'rb'))
+print(aboost.best_params_)
+
+y_pred_aboost = aboost.predict(X_test_prepared)
+
+precision_aboost, recall_aboost, fscore_aboost, _aboost = score(y_test_prepared, y_pred_aboost, average='weighted')
+accuracy_aboost = accuracy_score(y_test_prepared, y_pred_aboost)
+
+metrics.append(pd.Series({'precision': precision_aboost, 'recall': recall_aboost,
+                          'fscore': fscore_aboost, 'accuracy': accuracy_aboost},
+                         name='AdamBoosting'))
+
+cm_aboost = confusion_matrix(y_test_prepared, y_pred_aboost)
+sns.heatmap(cm_aboost, annot=True, fmt='d', cmap=mpl.cm.binary)
+plt.show()
+
+# %%
+metrics_pd = pd.concat(metrics, axis=1)
+
+print(metrics_pd)
 
 # %% Plotting the Kaplan-Meier Curve
 from lifelines import KaplanMeierFitter, CoxPHFitter
