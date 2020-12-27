@@ -7,7 +7,6 @@ import seaborn as sns
 
 import pickle
 import category_encoders as ce
-
 from scipy.special import boxcox1p
 
 from sklearn.base import BaseEstimator
@@ -22,12 +21,13 @@ from sklearn.ensemble import GradientBoostingClassifier, AdaBoostClassifier, Ran
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
-
+from sklearn.svm import SVC
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import precision_recall_fscore_support as score
 from sklearn.metrics import confusion_matrix, accuracy_score, roc_auc_score
 
 # %%
+metrics = list()
 
 train_path = os.path.join('data', 'kaggle')
 
@@ -185,7 +185,7 @@ y_pred_lr = lr.predict(X_test_prepared)
 precision, recall, fscore, _ = score(y_test_prepared, y_pred_lr, average='weighted')
 accuracy = accuracy_score(y_test_prepared, y_pred_lr)
 
-metrics = list()
+
 metrics.append(pd.Series({'precision': precision, 'recall': recall,
                           'fscore': fscore, 'accuracy': accuracy},
                          name='lr'))
@@ -193,6 +193,38 @@ metrics.append(pd.Series({'precision': precision, 'recall': recall,
 lr_cm = confusion_matrix(y_test_prepared, y_pred_lr)
 sns.heatmap(lr_cm, annot=True, fmt='d', cmap=mpl.cm.binary)
 plt.show()
+
+# %% SVC
+param_svc = {
+    'kernel': ['poly', 'rbf'],
+    'C': np.logspace(-4, 4, 5),
+    'degree': [2, 3]
+}
+svc = GridSearchCV(SVC(), param_svc, verbose=True, cv=4, n_jobs=-1)
+svc.fit(X_train_prepared, y_train_prepared)
+print(svc.best_params_)
+pkl_svc = open('svc.pkl', 'wb')
+pickle.dump(svc, pkl_svc)
+pkl_svc.close()
+
+#%%
+svc = pickle.load(open('svc.pkl', 'rb'))
+print(svc.best_params_)
+
+y_pred_svc = svc.predict(X_test_prepared)
+
+precision_svc, recall_svc, fscore_svc, _ = score(y_test_prepared, y_pred_svc, average='weighted')
+accuracy_svc = accuracy_score(y_test_prepared, y_pred_svc)
+
+
+metrics.append(pd.Series({'precision': precision_svc, 'recall': recall_svc,
+                          'fscore': fscore_svc, 'accuracy': accuracy_svc},
+                         name='SVC'))
+
+cm_svc = confusion_matrix(y_test_prepared, y_pred_svc)
+sns.heatmap(cm_svc, annot=True, fmt='d', cmap=mpl.cm.binary)
+plt.show()
+print(precision_svc, recall_svc, fscore_svc, accuracy_svc)
 # %%
 param_knn = {
     'n_neighbors': list(range(2, 11)),
@@ -201,6 +233,14 @@ param_knn = {
 knn = GridSearchCV(KNeighborsClassifier(), param_knn, verbose=True, cv=4, n_jobs=-1)
 
 knn.fit(X_train_prepared, y_train_prepared)
+print(knn.best_params_)
+
+pkl_knn = open('knn.pkl', 'wb')
+pickle.dump(knn, pkl_knn)
+pkl_knn.close()
+
+#%%
+knn = pickle.load(open('knn.pkl', 'rb'))
 print(knn.best_params_)
 
 y_pred_knn = knn.predict(X_test_prepared)
@@ -228,6 +268,15 @@ tree = GridSearchCV(DecisionTreeClassifier(), param_tree, verbose=True, cv=4, n_
 tree.fit(X_train_prepared, y_train_prepared)
 print(tree.best_params_)
 
+
+pkl_dtree = open('dtree.pkl', 'wb')
+pickle.dump(tree, pkl_dtree)
+pkl_dtree.close()
+
+#%%
+tree = pickle.load(open('dtree.pkl', 'rb'))
+print(tree.best_params_)
+
 y_pred_tree = tree.predict(X_test_prepared)
 
 precision_tree, recall_tree, fscore_tree, _tree = score(y_test_prepared, y_pred_tree, average='weighted')
@@ -247,13 +296,19 @@ param_rf = {
     'n_estimators': [15, 20, 30, 40, 50, 100, 150, 200, 300, 400],
     'max_depth': list(np.arange(5, 15)),
     'warm_start': [True, False],
-    'oob_score': [True]
+    'oob_score': [False]
 }
 
 rf = GridSearchCV(RandomForestClassifier(), param_rf, verbose=True, cv=4, n_jobs=-1)
 rf.fit(X_train_prepared, y_train_prepared)
 print(rf.best_params_)
+pkl_rf = open('rf.pkl', 'wb')
+pickle.dump(rf, pkl_rf)
+pkl_rf.close()
 
+#%%
+rf = pickle.load(open('rf.pkl', 'rb'))
+print(rf.best_params_)
 y_pred_rf = rf.predict(X_test_prepared)
 
 precision_rf, recall_rf, fscore_rf, _rf = score(y_test_prepared, y_pred_rf, average='weighted')
@@ -266,19 +321,26 @@ metrics.append(pd.Series({'precision': precision_rf, 'recall': recall_rf,
 cm_rf = confusion_matrix(y_test_prepared, y_pred_rf)
 sns.heatmap(cm_rf, annot=True, fmt='d', cmap=mpl.cm.binary)
 plt.show()
-
 # %%
 param_etc = {
     'criterion': ['gini', 'entropy'],
     'n_estimators': [15, 20, 30, 40, 50, 100, 150, 200, 300, 400],
     'max_depth': list(np.arange(5, 15)),
     'warm_start': [True, False],
-    'bootstrap': [True],
-    'oob_score': [True, False]
+    'bootstrap': [True, False],
+    'oob_score': [False]
 }
 
 extrTree = GridSearchCV(ExtraTreesClassifier(), param_etc, verbose=True, cv=4, n_jobs=-1)
 extrTree.fit(X_train_prepared, y_train_prepared)
+print(extrTree.best_params_)
+
+pkl_extrTree = open('exTree.pkl', 'wb')
+pickle.dump(extrTree, pkl_extrTree)
+pkl_extrTree.close()
+
+#%%
+extrTree = pickle.load(open('exTree.pkl', 'rb'))
 print(extrTree.best_params_)
 
 y_pred_extrTree = extrTree.predict(X_test_prepared)
@@ -294,17 +356,17 @@ metrics.append(pd.Series({'precision': precision_extrTree, 'recall': recall_extr
 cm_extrTree = confusion_matrix(y_test_prepared, y_pred_extrTree)
 sns.heatmap(cm_extrTree, annot=True, fmt='d', cmap=mpl.cm.binary)
 plt.show()
-
+print(precision_extrTree, recall_extrTree, fscore_extrTree, accuracy_extrTree)
 # %%
 param_gb = {
-    'criterion': ['friedman_mse', 'mse'],
+    #'criterion': ['friedman_mse', 'mse'],
     'n_estimators': [30, 50, 100, 150, 200, 300],
     "learning_rate": [0.01, 0.05, 0.1, 0.15, 0.2],
     #    "min_samples_split": np.linspace(0.1, 0.5, 5),
     #    "min_samples_leaf": np.linspace(0.1, 0.5, 5),
-    "max_depth": [3, 5, 8],
+    "max_depth": list(np.arange(4, 15)),
     "max_features": ["log2", "sqrt"],
-    "subsample": [0.5, 0.75, 1.0],
+    "subsample": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
 }
 
 gboost = GridSearchCV(GradientBoostingClassifier(), param_gb, verbose=True, cv=4, n_jobs=-1)
@@ -331,7 +393,7 @@ metrics.append(pd.Series({'precision': precision_gboost, 'recall': recall_gboost
 cm_gboost = confusion_matrix(y_test_prepared, y_pred_gboost)
 sns.heatmap(cm_gboost, annot=True, fmt='d', cmap=mpl.cm.binary)
 plt.show()
-
+print(precision_gboost, recall_gboost, fscore_gboost, accuracy_gboost)
 # %%
 param_aboost = {
     'n_estimators': [30, 50, 100, 150, 200, 300],
@@ -348,7 +410,7 @@ pickle.dump(aboost, pkl_aboost_file)
 pkl_aboost_file.close()
 
 # %%
-aboost = pickle.load(open('gboot.pkl', 'rb'))
+aboost = pickle.load(open('aboot.pkl', 'rb'))
 print(aboost.best_params_)
 
 y_pred_aboost = aboost.predict(X_test_prepared)
@@ -363,7 +425,7 @@ metrics.append(pd.Series({'precision': precision_aboost, 'recall': recall_aboost
 cm_aboost = confusion_matrix(y_test_prepared, y_pred_aboost)
 sns.heatmap(cm_aboost, annot=True, fmt='d', cmap=mpl.cm.binary)
 plt.show()
-
+print(precision_aboost, recall_aboost, fscore_aboost, accuracy_aboost)
 # %%
 metrics_pd = pd.concat(metrics, axis=1)
 
