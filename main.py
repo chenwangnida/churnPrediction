@@ -26,6 +26,11 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import precision_recall_fscore_support as score
 from sklearn.metrics import confusion_matrix, accuracy_score, roc_auc_score
 
+from tensorflow import keras
+from keras.models import Sequential
+from keras.layers import Input, Dense, Flatten, Dropout, BatchNormalization
+from keras.optimizers import Adam, SGD, RMSprop
+
 # %%
 metrics = list()
 
@@ -185,7 +190,6 @@ y_pred_lr = lr.predict(X_test_prepared)
 precision, recall, fscore, _ = score(y_test_prepared, y_pred_lr, average='weighted')
 accuracy = accuracy_score(y_test_prepared, y_pred_lr)
 
-
 metrics.append(pd.Series({'precision': precision, 'recall': recall,
                           'fscore': fscore, 'accuracy': accuracy},
                          name='lr'))
@@ -207,7 +211,7 @@ pkl_svc = open('svc.pkl', 'wb')
 pickle.dump(svc, pkl_svc)
 pkl_svc.close()
 
-#%%
+# %%
 svc = pickle.load(open('svc.pkl', 'rb'))
 print(svc.best_params_)
 
@@ -215,7 +219,6 @@ y_pred_svc = svc.predict(X_test_prepared)
 
 precision_svc, recall_svc, fscore_svc, _ = score(y_test_prepared, y_pred_svc, average='weighted')
 accuracy_svc = accuracy_score(y_test_prepared, y_pred_svc)
-
 
 metrics.append(pd.Series({'precision': precision_svc, 'recall': recall_svc,
                           'fscore': fscore_svc, 'accuracy': accuracy_svc},
@@ -239,7 +242,7 @@ pkl_knn = open('knn.pkl', 'wb')
 pickle.dump(knn, pkl_knn)
 pkl_knn.close()
 
-#%%
+# %%
 knn = pickle.load(open('knn.pkl', 'rb'))
 print(knn.best_params_)
 
@@ -268,12 +271,11 @@ tree = GridSearchCV(DecisionTreeClassifier(), param_tree, verbose=True, cv=4, n_
 tree.fit(X_train_prepared, y_train_prepared)
 print(tree.best_params_)
 
-
 pkl_dtree = open('dtree.pkl', 'wb')
 pickle.dump(tree, pkl_dtree)
 pkl_dtree.close()
 
-#%%
+# %%
 tree = pickle.load(open('dtree.pkl', 'rb'))
 print(tree.best_params_)
 
@@ -306,7 +308,7 @@ pkl_rf = open('rf.pkl', 'wb')
 pickle.dump(rf, pkl_rf)
 pkl_rf.close()
 
-#%%
+# %%
 rf = pickle.load(open('rf.pkl', 'rb'))
 print(rf.best_params_)
 y_pred_rf = rf.predict(X_test_prepared)
@@ -339,7 +341,7 @@ pkl_extrTree = open('exTree.pkl', 'wb')
 pickle.dump(extrTree, pkl_extrTree)
 pkl_extrTree.close()
 
-#%%
+# %%
 extrTree = pickle.load(open('exTree.pkl', 'rb'))
 print(extrTree.best_params_)
 
@@ -359,7 +361,7 @@ plt.show()
 print(precision_extrTree, recall_extrTree, fscore_extrTree, accuracy_extrTree)
 # %%
 param_gb = {
-    #'criterion': ['friedman_mse', 'mse'],
+    # 'criterion': ['friedman_mse', 'mse'],
     'n_estimators': [30, 50, 100, 150, 200, 300],
     "learning_rate": [0.01, 0.05, 0.1, 0.15, 0.2],
     #    "min_samples_split": np.linspace(0.1, 0.5, 5),
@@ -431,6 +433,82 @@ metrics_pd = pd.concat(metrics, axis=1)
 
 print(metrics_pd)
 
+# %%
+model_1 = Sequential()
+model_1.add(Dense(110, input_shape=(73,), activation='relu'))
+model_1.add(Dense(1, activation='sigmoid'))
+
+model_1.summary()
+
+model_1.compile(SGD(lr=.001), "binary_crossentropy", metrics=["accuracy"])
+run_hist_1 = model_1.fit(X_train_prepared, y_train_prepared, validation_data=(X_test_prepared, y_test_prepared),
+                         epochs=1500)
+
+model_1.save('knn1')
+
+n = len(run_hist_1.history["loss"])
+
+fig = plt.figure(figsize=(12, 6))
+ax = fig.add_subplot(1, 2, 1)
+ax.plot(range(n), (run_hist_1.history["loss"]), 'r.', label="Train Loss")
+ax.plot(range(n), (run_hist_1.history["val_loss"]), 'b.', label="Validation Loss")
+ax.legend()
+ax.set_title('Loss over iterations')
+
+ax = fig.add_subplot(1, 2, 2)
+ax.plot(range(n), (run_hist_1.history["accuracy"]), 'r.', label="Train Acc")
+ax.plot(range(n), (run_hist_1.history["val_accuracy"]), 'b.', label="Validation Acc")
+ax.legend(loc='lower right')
+ax.set_title('Accuracy over iterations')
+plt.show()
+# %%
+model_1_read = keras.models.load_model('knn1')
+#print(run_hist_1.history.keys())
+y_pred_knn1 = model_1_read.predict_classes(X_test_prepared)
+precision_nn1, recall_nn1, fscore_nn1, _ = score(y_test_prepared, y_pred_knn1, average='weighted')
+accuracy_nn1 = accuracy_score(y_test_prepared, y_pred_knn1)
+
+print(precision_nn1, recall_nn1, fscore_nn1, accuracy_nn1)
+
+
+
+# %%
+model_2 = Sequential()
+model_2.add(Dense(50, input_shape=(73,), activation="relu"))
+model_2.add(Dense(50,  activation="relu"))
+model_2.add(Dense(1, activation="sigmoid"))
+
+model_2.summary()
+
+model_2.compile(SGD(lr=.001), "binary_crossentropy", metrics=["accuracy"])
+run_hist_2 = model_2.fit(X_train_prepared, y_train_prepared, validation_data=(X_test_prepared, y_test_prepared),
+                         epochs=1500)
+
+model_2.save('knn2')
+
+n = len(run_hist_2.history["loss"])
+
+fig = plt.figure(figsize=(12, 6))
+ax = fig.add_subplot(1, 2, 1)
+ax.plot(range(n), (run_hist_2.history["loss"]), 'r.', label="Train Loss")
+ax.plot(range(n), (run_hist_2.history["val_loss"]), 'b.', label="Validation Loss")
+ax.legend()
+ax.set_title('Loss over iterations')
+
+ax = fig.add_subplot(1, 2, 2)
+ax.plot(range(n), (run_hist_2.history["accuracy"]), 'r.', label="Train Acc")
+ax.plot(range(n), (run_hist_2.history["val_accuracy"]), 'b.', label="Validation Acc")
+ax.legend(loc='lower right')
+ax.set_title('Accuracy over iterations')
+plt.show()
+# %%
+model_2_read = keras.models.load_model('knn2')
+print(run_hist_2.history.keys())
+y_pred_knn2 = model_2_read.predict_classes(X_test_prepared)
+precision_nn2, recall_nn2, fscore_nn2, _ = score(y_test_prepared, y_pred_knn2, average='weighted')
+accuracy_nn2 = accuracy_score(y_test_prepared, y_pred_knn2)
+
+print(precision_nn2, recall_nn2, fscore_nn2, accuracy_nn2)
 # %% Plotting the Kaplan-Meier Curve
 from lifelines import KaplanMeierFitter, CoxPHFitter
 
